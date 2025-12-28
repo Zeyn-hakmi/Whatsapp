@@ -1,0 +1,19 @@
+project_id = "aukdxqsfvzlvzjuyiitg"
+
+[functions.webhook-status]
+verify_jwt = false
+
+[functions.notify-admin]
+verify_jwt = false
+
+[functions.send-team-invite]
+verify_jwt = true
+
+[functions.notify-assignment]
+verify_jwt = true
+
+[functions.social-webhook]
+verify_jwt = false
+
+[functions.send-social-message]
+verify_jwt = true
