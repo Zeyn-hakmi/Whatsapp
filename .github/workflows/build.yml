@@ -1,0 +1,30 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Build Project
+      run: npm run build
+      env:
+        # Mapping your GitHub Secrets to the Environment Variables Vite needs
+        VITE_SUPABASE_URL: ${{ secrets.SBURL }}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASEDATA }}
