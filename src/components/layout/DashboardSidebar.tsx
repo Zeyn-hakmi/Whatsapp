@@ -22,6 +22,7 @@ import {
   BookOpen,
   Target,
   MessageSquareQuote,
+  Megaphone,
   Share2,
   Key,
 } from "lucide-react";
