@@ -19,6 +19,12 @@ import QuickReplyNode from './nodes/QuickReplyNode';
 import ConditionNode from './nodes/ConditionNode';
 import ApiCallNode from './nodes/ApiCallNode';
 import StartNode from './nodes/StartNode';
+import DelayNode from './nodes/DelayNode';
+import ABTestNode from './nodes/ABTestNode';
+import HandoffNode from './nodes/HandoffNode';
+import AppointmentNode from './nodes/AppointmentNode';
+import WebhookTriggerNode from './nodes/WebhookTriggerNode';
+import EmailNode from './nodes/EmailNode';
 import { NodePanel } from './NodePanel';
 import { NodeEditor } from './NodeEditor';
 import { FlowPreview } from './FlowPreview';
@@ -29,6 +35,12 @@ const nodeTypes = {
   quickReply: QuickReplyNode,
   condition: ConditionNode,
   apiCall: ApiCallNode,
+  delay: DelayNode,
+  abTest: ABTestNode,
+  handoff: HandoffNode,
+  appointment: AppointmentNode,
+  webhookTrigger: WebhookTriggerNode,
+  email: EmailNode,
 };
 
 const defaultStartNode: Node = {
@@ -48,11 +60,11 @@ interface FlowCanvasProps {
   isInitialized?: boolean;
 }
 
-export function FlowCanvas({ 
-  initialNodes = [], 
-  initialEdges = [], 
+export function FlowCanvas({
+  initialNodes = [],
+  initialEdges = [],
   onFlowChange,
-  isInitialized = true 
+  isInitialized = true
 }: FlowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(
@@ -153,6 +165,34 @@ export function FlowCanvas({
           url: '/api/data',
           saveAs: 'response',
         },
+        delay: {
+          label: 'Delay',
+          duration: 1,
+          unit: 'minutes',
+        },
+        abTest: {
+          label: 'A/B Test',
+          variants: [
+            { name: 'A', percentage: 50 },
+            { name: 'B', percentage: 50 },
+          ],
+        },
+        handoff: {
+          label: 'Human Handoff',
+          assignTo: 'available',
+          message: 'Connecting to agent...',
+        },
+        appointment: {
+          label: 'Schedule',
+        },
+        webhookTrigger: {
+          label: 'Webhook',
+          method: 'POST',
+        },
+        email: {
+          label: 'Send Email',
+          subject: 'Notification',
+        },
       };
 
       const newNode: Node = {
@@ -194,7 +234,7 @@ export function FlowCanvas({
   return (
     <div className="flex h-full">
       <NodePanel />
-      
+
       <div ref={reactFlowWrapper} className="flex-1 h-full">
         <ReactFlow
           nodes={nodes}
@@ -224,7 +264,7 @@ export function FlowCanvas({
           />
         </ReactFlow>
       </div>
-      
+
       {selectedNode ? (
         <NodeEditor
           node={selectedNode}
