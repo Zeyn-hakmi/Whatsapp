@@ -56,7 +56,7 @@ export default function KnowledgeBase() {
     });
 
     const { items, isLoading, stats, createItem, deleteItem, reprocessItem } = useKnowledgeBase(selectedAgentId);
-    const { aiAgents } = useAiAgents();
+    const { agents: aiAgents } = useAiAgents();
 
     const filteredItems = items.filter(item =>
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
