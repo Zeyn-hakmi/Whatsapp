@@ -50,10 +50,12 @@ import {
   RefreshCw,
   Webhook,
   Loader2,
+  Import,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { WebhookSettings, WebhookConfig } from "@/components/phone-numbers/WebhookSettings";
+import { SyncMetaDialog } from "@/components/phone-numbers/SyncMetaDialog";
 import { usePhoneNumbers, PhoneNumber, PhoneNumberInput } from "@/hooks/usePhoneNumbers";
 
 const qualityColors = {
@@ -82,6 +84,7 @@ export default function PhoneNumbers() {
   const { phoneNumbers, isLoading, createPhoneNumber, updatePhoneNumber, deletePhoneNumber } = usePhoneNumbers();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
   const [editingPhone, setEditingPhone] = useState<PhoneNumber | null>(null);
   const [webhookPhone, setWebhookPhone] = useState<PhoneNumber | null>(null);
 
@@ -201,7 +204,11 @@ export default function PhoneNumbers() {
   return (
     <DashboardLayout title="Phone Numbers" subtitle="Manage your WhatsApp Business phone numbers and their metadata">
       <div className="space-y-6">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setIsSyncDialogOpen(true)}>
+            <Import className="h-4 w-4" />
+            Sync From Meta
+          </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2">
@@ -506,6 +513,9 @@ export default function PhoneNumbers() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Sync Meta Dialog */}
+        <SyncMetaDialog open={isSyncDialogOpen} onOpenChange={setIsSyncDialogOpen} />
 
         {/* Webhook Settings Dialog */}
         {webhookPhone && (
