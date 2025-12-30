@@ -56,9 +56,17 @@ export default function KnowledgeBase() {
     });
 
     const { items, isLoading, stats, createItem, deleteItem, reprocessItem } = useKnowledgeBase(selectedAgentId);
-    const { agents: aiAgents } = useAiAgents();
+    const { agents: aiAgents = [] } = useAiAgents();
 
-    const filteredItems = items.filter(item =>
+    // Debug logging
+    console.log("KnowledgeBase Render:", {
+        itemsCount: items?.length,
+        agentsCount: aiAgents?.length,
+        aiAgentsVal: aiAgents,
+        loading: isLoading
+    });
+
+    const filteredItems = (items || []).filter(item =>
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.content.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -234,7 +242,7 @@ export default function KnowledgeBase() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">All Agents (Global)</SelectItem>
-                                            {aiAgents.map((agent) => (
+                                            {(aiAgents || []).map((agent) => (
                                                 <SelectItem key={agent.id} value={agent.id}>
                                                     {agent.name}
                                                 </SelectItem>
@@ -304,7 +312,7 @@ export default function KnowledgeBase() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Agents</SelectItem>
-                            {aiAgents.map((agent) => (
+                            {(aiAgents || []).map((agent) => (
                                 <SelectItem key={agent.id} value={agent.id}>
                                     {agent.name}
                                 </SelectItem>
