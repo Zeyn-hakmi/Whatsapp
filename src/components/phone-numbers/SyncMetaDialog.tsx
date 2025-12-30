@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, RefreshCw, Smartphone } from "lucide-react";
+import { Loader2, RefreshCw, Smartphone, Facebook, Key } from "lucide-react";
 import { toast } from "sonner";
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
+import { useFacebookSDK } from "@/hooks/useFacebookSDK";
+import { Switch } from "@/components/ui/switch";
 
 interface SyncMetaDialogProps {
     open: boolean;
@@ -24,25 +26,93 @@ interface MetaPhoneNumber {
 
 export function SyncMetaDialog({ open, onOpenChange }: SyncMetaDialogProps) {
     const [step, setStep] = useState<"CREDENTIALS" | "SELECTION">("CREDENTIALS");
+    const [useManualInput, setUseManualInput] = useState(false);
+
+    // Credentials state
     const [businessAccountId, setBusinessAccountId] = useState("");
     const [accessToken, setAccessToken] = useState("");
+
+    // Data state
     const [isLoading, setIsLoading] = useState(false);
     const [foundNumbers, setFoundNumbers] = useState<MetaPhoneNumber[]>([]);
     const [selectedNumbers, setSelectedNumbers] = useState<string[]>([]);
 
     const { createPhoneNumber } = usePhoneNumbers();
 
-    const fetchNumbers = async () => {
-        if (!businessAccountId || !accessToken) {
-            toast.error("Please enter both Business Account ID and Access Token");
+    // FB SDK
+    const appId = import.meta.env.VITE_META_APP_ID || "";
+    const { login: fbLogin, isLoaded: isFbLoaded, api: fbApi } = useFacebookSDK({ appId });
+
+    const handleFacebookLogin = async () => {
+        if (!appId) {
+            toast.error("Meta App ID is missing. Please check your .env file.");
             return;
         }
 
-        setIsLoading(true);
         try {
-            // https://developers.facebook.com/docs/whatsapp/business-management-api/manage-phone-numbers
+            setIsLoading(true);
+            const authResponse = await fbLogin({
+                scope: "whatsapp_business_management,whatsapp_business_messaging",
+                return_scopes: true
+            });
+
+            if (!authResponse?.accessToken) {
+                throw new Error("Failed to get access token");
+            }
+
+            setAccessToken(authResponse.accessToken);
+
+            // Fetch Businesses to find the WABA ID
+            // We first get the user's businesses, then their WhatsApp Accounts
+            const businesses = await fbApi('/me/businesses', 'GET', { access_token: authResponse.accessToken });
+
+            if (!businesses?.data || businesses.data.length === 0) {
+                toast.error("No Meta Businesses found for this user.");
+                setIsLoading(false);
+                return;
+            }
+
+            // For simplicity in this iteration, we'll try to find WABA IDs for the first business
+            // A more robust UI would allow selecting the business first.
+            // We will try to fetch numbers directly if valid WABA ID is not found, or prompt user.
+            // Actually, let's fetch client_whatsapp_business_accounts for each business
+
+            let wabaFound = null;
+
+            // Search for a WABA in the businesses
+            for (const bus of businesses.data) {
+                const wabaResponse = await fbApi(`/${bus.id}/client_whatsapp_business_accounts`, 'GET', { access_token: authResponse.accessToken });
+                if (wabaResponse?.data && wabaResponse.data.length > 0) {
+                    wabaFound = wabaResponse.data[0]; // Take the first one found
+                    break;
+                }
+            }
+
+            if (wabaFound) {
+                setBusinessAccountId(wabaFound.id);
+                toast.success("Connected to Meta Business!");
+                // Auto-fetch if we found everything
+                await fetchNumbersInternal(wabaFound.id, authResponse.accessToken);
+            } else {
+                toast.warning("Connected, but no WhatsApp Business Account found automatically. Please enter ID manually or check permissions.");
+                setUseManualInput(true); // Reveal inputs to let them paste ID if they know it
+                setBusinessAccountId("");
+                // We stay on CREDENTIALS step but with token filled
+            }
+
+        } catch (error: any) {
+            console.error("FB Login Error:", error);
+            toast.error(error.message || "Facebook Login failed");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const fetchNumbersInternal = async (wabaId: string, token: string) => {
+        try {
+            setIsLoading(true);
             const response = await fetch(
-                `https://graph.facebook.com/v18.0/${businessAccountId}/phone_numbers?access_token=${accessToken}`
+                `https://graph.facebook.com/v18.0/${wabaId}/phone_numbers?access_token=${token}`
             );
 
             const data = await response.json();
@@ -59,10 +129,18 @@ export function SyncMetaDialog({ open, onOpenChange }: SyncMetaDialogProps) {
                 setStep("SELECTION");
             }
         } catch (error: any) {
-            toast.error(error.message || "Failed to fetch phone numbers from Meta");
+            toast.error(error.message || "Failed to fetch phone numbers");
         } finally {
             setIsLoading(false);
         }
+    }
+
+    const handleManualFetch = async () => {
+        if (!businessAccountId || !accessToken) {
+            toast.error("Please enter both Business Account ID and Access Token");
+            return;
+        }
+        await fetchNumbersInternal(businessAccountId, accessToken);
     };
 
     const handleImport = async () => {
@@ -102,8 +180,7 @@ export function SyncMetaDialog({ open, onOpenChange }: SyncMetaDialogProps) {
         setStep("CREDENTIALS");
         setFoundNumbers([]);
         setSelectedNumbers([]);
-        setAccessToken("");
-        // We keep businessAccountId as user might want to reuse it
+        // We keep tokens/IDs for convenience until dialog closes fully or page reload
     };
 
     const toggleSelection = (id: string) => {
@@ -119,39 +196,86 @@ export function SyncMetaDialog({ open, onOpenChange }: SyncMetaDialogProps) {
                     <DialogTitle>Sync from Meta</DialogTitle>
                     <DialogDescription>
                         {step === "CREDENTIALS"
-                            ? "Enter your Meta Business credentials to search for WhatsApp numbers."
+                            ? "Connect your Meta Business account to import numbers."
                             : "Select the numbers you want to import to your dashboard."
                         }
                     </DialogDescription>
                 </DialogHeader>
 
                 {step === "CREDENTIALS" ? (
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="waba-id">WhatsApp Business Account ID</Label>
-                            <Input
-                                id="waba-id"
-                                placeholder="e.g. 10456..."
-                                value={businessAccountId}
-                                onChange={(e) => setBusinessAccountId(e.target.value)}
+                    <div className="space-y-6 py-4">
+                        {/* FB Login Button */}
+                        {!useManualInput && (
+                            <div className="flex flex-col items-center justify-center space-y-4 py-4">
+                                <Button
+                                    size="lg"
+                                    className="bg-[#1877F2] hover:bg-[#1864D9] text-white w-full sm:w-auto gap-2"
+                                    onClick={handleFacebookLogin}
+                                    disabled={isLoading || !isFbLoaded}
+                                >
+                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Facebook className="h-5 w-5" />}
+                                    Connect with Facebook
+                                </Button>
+                                {!appId && (
+                                    <p className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
+                                        Meta App ID not missing in .env
+                                    </p>
+                                )}
+                                <div className="relative w-full">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <span className="w-full border-t" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs uppercase">
+                                        <span className="bg-background px-2 text-muted-foreground">Or</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Manual Toggle */}
+                        <div className="flex items-center space-x-2">
+                            <Switch
+                                id="manual-mode"
+                                checked={useManualInput}
+                                onCheckedChange={setUseManualInput}
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Found in Meta Business Manager under WhatsApp Accounts.
-                            </p>
+                            <Label htmlFor="manual-mode" className="text-sm font-normal text-muted-foreground cursor-pointer">
+                                Enter credentials manually (Advanced)
+                            </Label>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="access-token">System User Access Token</Label>
-                            <Input
-                                id="access-token"
-                                type="password"
-                                placeholder="EAAG..."
-                                value={accessToken}
-                                onChange={(e) => setAccessToken(e.target.value)}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Requires 'whatsapp_business_management' permission.
-                            </p>
-                        </div>
+
+                        {/* Manual Inputs */}
+                        {useManualInput && (
+                            <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="waba-id">WhatsApp Business Account ID</Label>
+                                    <Input
+                                        id="waba-id"
+                                        placeholder="e.g. 10456..."
+                                        value={businessAccountId}
+                                        onChange={(e) => setBusinessAccountId(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="access-token">System User Access Token</Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="access-token"
+                                            type="password"
+                                            placeholder="EAAG..."
+                                            value={accessToken}
+                                            onChange={(e) => setAccessToken(e.target.value)}
+                                            className="pr-8"
+                                        />
+                                        <Key className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    </div>
+                                </div>
+                                <Button onClick={handleManualFetch} disabled={isLoading} className="w-full">
+                                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Fetch Numbers
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <ScrollArea className="h-[300px] pr-4">
@@ -186,12 +310,7 @@ export function SyncMetaDialog({ open, onOpenChange }: SyncMetaDialogProps) {
                 )}
 
                 <DialogFooter>
-                    {step === "CREDENTIALS" ? (
-                        <Button onClick={fetchNumbers} disabled={isLoading}>
-                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Fetch Numbers
-                        </Button>
-                    ) : (
+                    {step === "SELECTION" && (
                         <>
                             <Button variant="outline" onClick={() => setStep("CREDENTIALS")}>Back</Button>
                             <Button onClick={handleImport} disabled={isLoading || selectedNumbers.length === 0}>
